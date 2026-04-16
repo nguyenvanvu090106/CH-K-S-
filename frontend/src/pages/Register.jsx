@@ -45,7 +45,7 @@ const Register = () => {
   return (
     <div
       style={{
-        minHeight: '100vh',
+        minHeight: '90vh',
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
@@ -55,7 +55,7 @@ const Register = () => {
     >
       <div
         style={{
-          width: '450px',
+          width: '600px',
           backgroundColor: 'white',
           padding: '30px 40px',
           borderRadius: '10px',
@@ -105,6 +105,7 @@ const Register = () => {
                 marginBottom: '5px',
                 color: '#34495e',
                 fontWeight: 'bold',
+                fontSize: '25px',
               }}
             >
               Họ và tên:
@@ -115,7 +116,7 @@ const Register = () => {
               value={formData.fullName}
               onChange={handleChange}
               required
-              style={inputStyle}
+              style={{ ...inputStyle, fontSize: '30px', fontWeight: '500' }}
               placeholder="VD: Nguyễn Văn Vũ"
             />
           </div>
@@ -128,6 +129,7 @@ const Register = () => {
                   marginBottom: '5px',
                   color: '#34495e',
                   fontWeight: 'bold',
+                  fontSize: '25px',
                 }}
               >
                 Ngày sinh:
@@ -138,7 +140,7 @@ const Register = () => {
                 value={formData.dob}
                 onChange={handleChange}
                 required
-                style={inputStyle}
+                style={{ ...inputStyle, fontSize: '28px', fontWeight: '500' }}
               />
             </div>
             <div style={{ flex: 1 }}>
@@ -148,6 +150,7 @@ const Register = () => {
                   marginBottom: '5px',
                   color: '#34495e',
                   fontWeight: 'bold',
+                  fontSize: '25px',
                 }}
               >
                 Số CCCD:
@@ -158,8 +161,8 @@ const Register = () => {
                 value={formData.cccd}
                 onChange={handleChange}
                 required
-                style={inputStyle}
-                placeholder="12 chữ số"
+                style={{ ...inputStyle, fontSize: '30px', fontWeight: '500' }}
+                placeholder="VD: 123456789012"
               />
             </div>
           </div>
@@ -171,6 +174,7 @@ const Register = () => {
                 marginBottom: '5px',
                 color: '#34495e',
                 fontWeight: 'bold',
+                fontSize: '25px',
               }}
             >
               Phòng ban / Bộ phận:
@@ -181,7 +185,7 @@ const Register = () => {
               value={formData.department}
               onChange={handleChange}
               required
-              style={inputStyle}
+              style={{ ...inputStyle, fontSize: '30px', fontWeight: '500' }}
               placeholder="VD: IT, Nhân sự..."
             />
           </div>
@@ -194,6 +198,7 @@ const Register = () => {
                 marginBottom: '5px',
                 color: '#34495e',
                 fontWeight: 'bold',
+                fontSize: '25px',
               }}
             >
               Mật khẩu đăng nhập Web:
@@ -204,7 +209,7 @@ const Register = () => {
               value={formData.password}
               onChange={handleChange}
               required
-              style={inputStyle}
+              style={{ ...inputStyle, fontSize: '30px', fontWeight: '500', minHeight: '60px' }}
               placeholder="Dùng để đăng nhập hệ thống"
             />
           </div>
@@ -216,6 +221,8 @@ const Register = () => {
               borderRadius: '6px',
               border: '1px solid #e67e22',
               marginBottom: '20px',
+              textAlign: 'center',
+              fontSize: '25px',
             }}
           >
             <label
@@ -236,7 +243,7 @@ const Register = () => {
               onChange={handleChange}
               maxLength="6"
               required
-              style={{ ...inputStyle, textAlign: 'center', fontSize: '20px', letterSpacing: '5px' }}
+              style={{ ...inputStyle, textAlign: 'center', fontSize: '30px', letterSpacing: '5px' }}
               placeholder="••••••"
             />
             <p
@@ -255,6 +262,7 @@ const Register = () => {
             type="submit"
             style={{
               width: '100%',
+              minHeight: '60px',
               padding: '12px',
               backgroundColor: '#2980b9',
               color: 'white',
@@ -278,7 +286,7 @@ const Register = () => {
             borderTop: '1px solid #ecf0f1',
           }}
         >
-          <span style={{ color: '#7f8c8d', fontSize: '14px' }}>Đã có tài khoản? </span>
+          <span style={{ color: '#7f8c8d', fontSize: '25px' }}>Đã có tài khoản? </span>
           <span
             onClick={() => navigate('/login')}
             style={{
@@ -286,6 +294,7 @@ const Register = () => {
               fontWeight: 'bold',
               cursor: 'pointer',
               textDecoration: 'underline',
+              fontSize: '25px',
             }}
           >
             Đăng nhập ngay

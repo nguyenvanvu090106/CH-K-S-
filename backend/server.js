@@ -50,14 +50,20 @@ const checkRole = (requiredRole) => (req, res, next) => {
   next()
 }
 
-const upload = multer({
-  dest: 'uploads/',
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf') cb(null, true)
-    else cb(new Error('Chỉ chấp nhận file PDF!'), false)
+// Thay thế dòng cấu hình cũ bằng cụm này:
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/') // Thư mục lưu file
+  },
+  filename: function (req, file, cb) {
+    // Ép font tiếng Việt chuẩn xác
+    file.originalname = Buffer.from(file.originalname, 'latin1').toString('utf8')
+    // Gắn thời gian để không bị trùng tên file
+    cb(null, Date.now() + '-' + file.originalname)
   },
 })
 
+const upload = multer({ storage: storage })
 // ==========================================
 // APIs
 // ==========================================
@@ -105,12 +111,16 @@ app.post('/api/register', (req, res) => {
 
 // 2. UPLOAD (MANAGER)
 app.post('/api/upload', checkRole('Manager'), upload.single('document'), (req, res) => {
-  const { assignedTo } = req.body
+  // Lấy thêm customName từ req.body (form data gửi lên)
+  const { assignedTo, customName } = req.body
   if (!req.file || !assignedTo) return res.status(400).json({ error: 'Thiếu file hoặc người ký!' })
+
+  // KIỂM TRA: Nếu có customName thì dùng tên đó, nếu không thì lấy tên gốc của file
+  const displayName = customName ? customName : req.file.originalname
 
   const newDoc = {
     id: Date.now().toString(),
-    filename: req.file.originalname,
+    filename: displayName, // <--- Thay vì tên gốc, ta lưu cái tên đã được kiểm tra này
     path: req.file.path,
     originalHash: generateFileHash(req.file.path),
     assignedTo,
@@ -137,31 +147,45 @@ app.get('/api/documents/:id/view', (req, res) => {
 
 // 4. KÝ SỐ (EMPLOYEE)
 app.post('/api/sign', checkRole('Employee'), async (req, res) => {
-  const { documentId, employeeId, pin, x, y, pageNum } = req.body
+  const { documentId, employeeId, pin, percentX, percentY, pageNum } = req.body
   const doc = db.documents.find((d) => d.id == documentId)
   const employee = db.employees.find((e) => e.employeeId === employeeId)
 
   if (!doc || !employee) return res.status(404).json({ error: 'Thông tin không hợp lệ' })
 
   try {
+    // 1. KÝ NHỊ PHÂN (BẢN CHẤT BẢO MẬT BÊN TRONG)
     const sign = crypto.createSign('SHA256')
     sign.update(doc.originalHash)
     sign.end()
+    // Dùng mã PIN để mở khóa Private Key
     const signature = sign.sign({ key: employee.encryptedPrivateKey, passphrase: pin }, 'base64')
 
+    // 2. MỞ FILE PDF LÊN ĐỂ VẼ DẤU
     const pdfDoc = await PDFDocument.load(fs.readFileSync(doc.path))
     const pages = pdfDoc.getPages()
-    const targetPage = pages[(pageNum || 1) - 1]
+    const page = pages[pageNum - 1] // Lấy đúng trang Web gửi lên
     const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
 
+    // 3. TÍNH TOÁN TỌA ĐỘ PHẦN TRĂM (CHỐNG LỆCH & CHỐNG VĂNG LỀ)
+    const { width, height } = page.getSize()
+    let actualX = percentX * width
+    let actualY = (1 - percentY) * height // Lật trục Y lại cho đúng chuẩn PDF
+
+    const boxWidth = 200 // Chiều rộng con dấu
+    const boxHeight = 75 // Chiều cao con dấu
+
+    // Ép tọa độ safeX, safeY không cho lọt ra ngoài mép giấy
+    const safeX = Math.min(Math.max(actualX, 10), width - boxWidth - 10)
+    const safeY = Math.min(Math.max(actualY - boxHeight, 10), height - boxHeight - 10)
+
+    // 4. CHUẨN BỊ CHỮ KHÔNG DẤU (TRÁNH LỖI FONT PDF)
     const cleanName = employee.fullName
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/đ/g, 'd')
       .replace(/Đ/g, 'D')
-    // --- ĐOẠN CODE VẼ CON DẤU CHUYÊN NGHIỆP ---
 
-    // 1. Dọn dẹp dấu tiếng Việt cho Bộ phận (Tránh lỗi sập font PDF giống như tên)
     const cleanDept = employee.department
       ? employee.department
           .normalize('NFD')
@@ -170,51 +194,47 @@ app.post('/api/sign', checkRole('Employee'), async (req, res) => {
           .replace(/Đ/g, 'D')
       : 'N/A'
 
-    // 2. Thiết lập tọa độ và kích thước khung
-    const startX = parseFloat(x) || 50
-    const startY = parseFloat(y) || 100
-    const boxWidth = 200
-    const boxHeight = 75
+    // 5. BẮT ĐẦU VẼ CON DẤU VÀO TỌA ĐỘ (safeX, safeY)
 
-    // 3. Vẽ Khung hình chữ nhật nền mờ, viền đỏ nét đứt (Giống bản preview)
-    targetPage.drawRectangle({
-      x: startX,
-      y: startY,
+    // 5.1 Vẽ Khung nền mờ, viền đỏ nét đứt
+    page.drawRectangle({
+      x: safeX,
+      y: safeY,
       width: boxWidth,
       height: boxHeight,
-      borderColor: rgb(0.8, 0.2, 0.2), // Viền đỏ
+      borderColor: rgb(0.8, 0.2, 0.2),
       borderWidth: 1.5,
-      borderDashArray: [4, 4], // Tạo nét đứt
-      color: rgb(0.98, 0.94, 0.94), // Nền hồng cực nhạt
+      borderDashArray: [4, 4],
+      color: rgb(0.98, 0.94, 0.94),
     })
 
-    // 4. Vẽ dòng chữ xác thực màu Xanh Lá
-    // (Lưu ý: Không dùng icon ✅ vì font mặc định của PDF sẽ báo lỗi, ta dùng chữ [V] để thay thế)
-    targetPage.drawText('Signature Valid [V]', {
-      x: startX + 10,
-      y: startY + boxHeight - 18,
+    // 5.2 Vẽ dòng chữ Signature Valid màu xanh lá
+    page.drawText('Signature Valid [V]', {
+      x: safeX + 10,
+      y: safeY + boxHeight - 18,
       size: 11,
       font: font,
-      color: rgb(0.15, 0.68, 0.37), // Màu xanh lá cây
+      color: rgb(0.15, 0.68, 0.37),
     })
 
-    // 5. Vẽ thông tin chi tiết (Thêm Bộ phận)
-    // Phải dùng không dấu để an toàn tuyệt đối cho file
+    // 5.3 Vẽ thông tin chi tiết (Người ký, CCCD, Bộ phận, Ngày giờ)
     const detailText = `Signed by: ${cleanName}\nCCCD: ${employee.cccd}\nDept: ${cleanDept}\nDate: ${new Date().toLocaleString('vi-VN')}`
-
-    targetPage.drawText(detailText, {
-      x: startX + 10,
-      y: startY + boxHeight - 35,
+    page.drawText(detailText, {
+      x: safeX + 10,
+      y: safeY + boxHeight - 35,
       size: 9,
       font: font,
-      color: rgb(0.2, 0.2, 0.2), // Màu chữ xám đen cho dễ đọc
-      lineHeight: 12, // Khoảng cách giữa các dòng
+      color: rgb(0.2, 0.2, 0.2),
+      lineHeight: 12, // Cách dòng cho đẹp
     })
+
+    // 6. LƯU LẠI VÀ CẬP NHẬT DATABASE
     fs.writeFileSync(doc.path, await pdfDoc.save())
+
     Object.assign(doc, {
       signature,
       signerId: employeeId,
-      signerName: employee.fullName,
+      signerName: employee.fullName, // Database vẫn lưu có dấu để hiển thị Web cho đẹp
       signerCccd: employee.cccd,
       signerDept: employee.department,
       status: 'Signed',
@@ -222,6 +242,7 @@ app.post('/api/sign', checkRole('Employee'), async (req, res) => {
 
     res.json({ message: 'Ký thành công!', document: doc })
   } catch (e) {
+    console.error('LỖI KÝ SỐ:', e) // Sẽ in lỗi đỏ lòm ra Terminal nếu bị trục trặc
     res.status(401).json({ error: 'Mã PIN sai hoặc lỗi xử lý PDF!' })
   }
 })
@@ -229,8 +250,16 @@ app.post('/api/sign', checkRole('Employee'), async (req, res) => {
 // 5. DOWNLOAD
 app.get('/api/documents/:id/download', (req, res) => {
   const doc = db.documents.find((d) => d.id == req.params.id)
+
   if (!doc) return res.status(404).json({ error: 'Không thấy file!' })
-  res.download(path.resolve(doc.path), `Signed_${doc.id}.pdf`)
+
+  // Tạo tên file mới: Nếu đã ký thì ghép chữ "signed_" với tên gốc, chưa ký thì giữ nguyên tên gốc
+  const downloadName = doc.status === 'Signed' ? `signed_${doc.filename}` : doc.filename
+
+  // Trả file về cho trình duyệt với cái tên mới
+  res.download(path.resolve(doc.path), downloadName, (err) => {
+    if (err) console.error('Lỗi khi tải file:', err)
+  })
 })
 
 app.get('/api/documents', (req, res) => res.json(db.documents))
@@ -275,6 +304,34 @@ app.post('/api/login', (req, res) => {
     })
   } else {
     res.status(401).json({ error: 'Sai CCCD, Mật khẩu hoặc Chọn sai Vai trò!' })
+  }
+})
+// ==========================================
+// API: LẤY VÀ CẬP NHẬT THÔNG TIN NHÂN VIÊN
+// ==========================================
+
+// 1. Lấy thông tin hiện tại
+app.get('/api/employee/:id', (req, res) => {
+  const user = db.employees.find((e) => e.employeeId === req.params.id)
+  if (user) {
+    res.json(user)
+  } else {
+    res.status(404).json({ error: 'Không tìm thấy nhân viên' })
+  }
+})
+
+// 2. Cập nhật thông tin
+app.post('/api/update-profile', (req, res) => {
+  const { employeeId, fullName, dob, department } = req.body
+  const user = db.employees.find((e) => e.employeeId === employeeId)
+
+  if (user) {
+    user.fullName = fullName
+    user.dob = dob
+    user.department = department
+    res.json({ success: true, message: 'Cập nhật hồ sơ thành công!' })
+  } else {
+    res.status(404).json({ error: 'Lỗi cập nhật!' })
   }
 })
 app.listen(PORT, () => console.log(`[SYSTEM] Backend running on http://localhost:${PORT}`))

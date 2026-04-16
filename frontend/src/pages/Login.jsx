@@ -186,6 +186,7 @@ const Login = () => {
             type="submit"
             style={{
               width: '100%',
+              minHeight: '70px',
               padding: '14px',
               backgroundColor: '#3498db',
               color: 'white',
