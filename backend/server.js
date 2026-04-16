@@ -15,12 +15,23 @@ const PORT = 3000
 // ==========================================
 // DATABASE IN-MEMORY
 // ==========================================
+// ==========================================
+// DATABASE IN-MEMORY
+// ==========================================
 const db = {
   documents: [],
-  employees: [],
   keys: {},
+  // Cấp sẵn 1 tài khoản Manager mặc định
+  employees: [
+    {
+      employeeId: 'ADMIN_01',
+      fullName: 'Quản Trị Viên',
+      cccd: 'admin', // Dùng chữ 'admin' làm CCCD để dễ test
+      password: 'admin', // Mật khẩu Manager
+      role: 'Manager',
+    },
+  ],
 }
-
 // ==========================================
 // HELPER FUNCTIONS
 // ==========================================
@@ -55,9 +66,11 @@ app.get('/', (req, res) => res.send('Secure Backend is running!'))
 
 // 1. ĐĂNG KÝ
 app.post('/api/register', (req, res) => {
-  const { fullName, dob, department, cccd, pin } = req.body
-  if (!fullName || !cccd || !pin) return res.status(400).json({ error: 'Thiếu thông tin!' })
+  const { fullName, dob, department, cccd, password, pin } = req.body
 
+  if (!fullName || !cccd || !password || !pin) {
+    return res.status(400).json({ error: 'Vui lòng điền đầy đủ thông tin!' })
+  }
   if (db.employees.some((emp) => emp.cccd === cccd)) {
     return res.status(400).json({ error: 'CCCD đã tồn tại!' })
   }
@@ -80,6 +93,8 @@ app.post('/api/register', (req, res) => {
     dob,
     department,
     cccd,
+    password: password, // Lưu mật khẩu
+    role: 'Employee', // Mặc định người đăng ký mới là Nhân viên
     encryptedPrivateKey: privateKey,
   }
 
@@ -237,5 +252,29 @@ app.post('/api/check-employee', (req, res) => {
     res.status(404).json({ error: 'Mã nhân viên không tồn tại trong hệ thống!' })
   }
 })
+// ==========================================
+// API: ĐĂNG NHẬP HỆ THỐNG
+// ==========================================
+app.post('/api/login', (req, res) => {
+  const { cccd, password, role } = req.body
 
+  // Kiểm tra khớp 3 điều kiện: CCCD, Password và Role
+  const user = db.employees.find(
+    (e) => e.cccd === cccd && e.password === password && e.role === role
+  )
+
+  if (user) {
+    res.json({
+      success: true,
+      message: 'Đăng nhập thành công',
+      session: {
+        employeeId: user.employeeId,
+        fullName: user.fullName,
+        role: user.role,
+      },
+    })
+  } else {
+    res.status(401).json({ error: 'Sai CCCD, Mật khẩu hoặc Chọn sai Vai trò!' })
+  }
+})
 app.listen(PORT, () => console.log(`[SYSTEM] Backend running on http://localhost:${PORT}`))

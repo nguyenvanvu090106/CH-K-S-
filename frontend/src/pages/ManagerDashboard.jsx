@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
-
+import { toast } from 'react-toastify'
 const ManagerDashboard = () => {
   const navigate = useNavigate()
   const [file, setFile] = useState(null)
@@ -14,7 +14,7 @@ const ManagerDashboard = () => {
   useEffect(() => {
     const session = JSON.parse(localStorage.getItem('userSession'))
     if (!session || session.role !== 'Manager') {
-      alert('Bạn không có quyền truy cập trang này!')
+      toast.warning('Bạn không có quyền truy cập trang này!')
       navigate('/login')
     } else {
       fetchDocuments() // Nếu đúng Manager thì tải danh sách file

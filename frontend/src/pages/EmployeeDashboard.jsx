@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { Document, Page, pdfjs } from 'react-pdf'
-
+import { toast } from 'react-toastify'
 // Cấu hình Worker siêu việt để React có thể đọc hiểu dữ liệu nhị phân của PDF (Không có dòng này là lỗi liền nhé)
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
 
@@ -59,7 +59,7 @@ const EmployeeDashboard = () => {
   // 3. Hàm thực hiện Ký số
   const handleSign = async (doc) => {
     if (pin.length !== 6) {
-      alert('Vui lòng nhập đúng mã PIN 6 số!')
+      toast.error('Vui lòng nhập đúng mã PIN 6 số!')
       return
     }
 
@@ -80,13 +80,13 @@ const EmployeeDashboard = () => {
         { headers: { 'x-role': 'Employee' } }
       )
 
-      alert('Ký văn bản thành công!')
+      toast.success('Ký văn bản thành công!')
       setPin('') // Reset mã PIN
       setPreviewDoc(null)
       fetchMyDocs(employeeId)
       setStatusMsg('')
     } catch (error) {
-      alert(error.response?.data?.error || 'Lỗi hệ thống')
+      toast.error(error.response?.data?.error || 'Lỗi hệ thống')
       setStatusMsg('')
     }
 
@@ -94,9 +94,9 @@ const EmployeeDashboard = () => {
     const handleVerify = async (docId) => {
       try {
         const res = await axios.post('http://localhost:3000/api/verify', { documentId: docId })
-        alert(res.data.message)
+        toast.success(res.data.message)
       } catch (error) {
-        alert(error.response?.data?.message || 'Cảnh báo: File bị thay đổi!')
+        toast.warning(error.response?.data?.message || 'Cảnh báo: File bị thay đổi!')
       }
     }
   }
@@ -114,13 +114,16 @@ const EmployeeDashboard = () => {
           marginBottom: '20px',
         }}
       >
-        <h2 style={{ color: '#27ae60' }}>Hộp Thư Văn Bản Của Bạn (ID: {employeeId}) 📩</h2>
+        <h2 style={{ marginTop: '20px', color: '#27ae60' }}>
+          Hộp Thư Văn Bản Của Bạn (ID: {employeeId}) 📩
+        </h2>
         <button
           onClick={() => {
             localStorage.removeItem('userSession')
             navigate('/login')
           }}
           style={{
+            marginTop: '20px',
             padding: '8px 15px',
             backgroundColor: '#e74c3c',
             color: 'white',

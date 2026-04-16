@@ -1,240 +1,309 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 
 const Register = () => {
-  // Thêm trường 'pin' vào state
+  const navigate = useNavigate()
   const [formData, setFormData] = useState({
     fullName: '',
     dob: '',
-    department: '',
     cccd: '',
+    department: '',
+    password: '', // <-- ĐÃ THÊM TRƯỜNG PASSWORD Ở ĐÂY
     pin: '',
   })
-
-  const [result, setResult] = useState(null)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
-  const handleSubmit = async (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault()
     setError('')
-    setResult(null)
+    setSuccess('')
 
-    // Validate cơ bản ở frontend
     if (formData.pin.length !== 6 || isNaN(formData.pin)) {
-      setError('Mã PIN phải là 6 chữ số!')
+      setError('Mã PIN phải bao gồm đúng 6 chữ số!')
       return
     }
 
     try {
-      const response = await axios.post('http://localhost:3000/api/register', formData)
-      setResult(response.data)
+      const res = await axios.post('http://localhost:3000/api/register', formData)
+      setSuccess('Đăng ký thành công! Hệ thống đã cấp phát Khóa thành công.')
+      // Xóa form sau khi đăng ký thành công
+      setFormData({ fullName: '', dob: '', cccd: '', department: '', password: '', pin: '' })
+
+      // Tự động chuyển về trang Đăng nhập sau 2 giây
+      setTimeout(() => navigate('/login'), 2000)
     } catch (err) {
-      setError(err.response?.data?.error || 'Lỗi kết nối đến server')
+      setError(err.response?.data?.error || 'Lỗi kết nối máy chủ!')
     }
   }
 
   return (
     <div
       style={{
-        maxWidth: '500px',
-        margin: '40px auto',
-        padding: '30px',
-        border: '1px solid #ccc',
-        borderRadius: '8px',
-        backgroundColor: '#fff',
-        boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
+        minHeight: '100vh',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f0f2f5',
+        padding: '20px',
       }}
     >
-      <h2 style={{ textAlign: 'center', color: '#2980b9' }}>Đăng Ký Danh Tính Số</h2>
+      <div
+        style={{
+          width: '450px',
+          backgroundColor: 'white',
+          padding: '30px 40px',
+          borderRadius: '10px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+        }}
+      >
+        <h2 style={{ textAlign: 'center', color: '#2980b9', marginBottom: '20px' }}>
+          Đăng Ký Danh Tính Số
+        </h2>
 
-      {error && (
-        <div
-          style={{
-            color: 'white',
-            backgroundColor: '#e74c3c',
-            padding: '10px',
-            borderRadius: '5px',
-            marginBottom: '15px',
-            textAlign: 'center',
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      {result ? (
-        <div
-          style={{
-            backgroundColor: '#d4edda',
-            padding: '20px',
-            borderRadius: '5px',
-            textAlign: 'center',
-          }}
-        >
-          <h3 style={{ color: '#155724' }}>🎉 {result.message}</h3>
+        {error && (
           <div
             style={{
-              margin: '20px 0',
-              padding: '15px',
-              backgroundColor: '#fff',
-              border: '2px dashed #28a745',
-              borderRadius: '8px',
-            }}
-          >
-            <p style={{ fontSize: '18px', margin: '5px 0' }}>Mã Nhân Viên của bạn:</p>
-            <strong style={{ fontSize: '24px', color: '#d35400' }}>
-              {result.employee.employeeId}
-            </strong>
-          </div>
-          <p style={{ color: '#e74c3c', fontWeight: 'bold' }}>
-            ⚠️ Hãy nhớ kỹ mã PIN 6 số của bạn để sử dụng khi Ký duyệt văn bản!
-          </p>
-          <button
-            onClick={() => {
-              setResult(null)
-              setFormData({ fullName: '', dob: '', department: '', cccd: '', pin: '' })
-            }}
-            style={{
-              marginTop: '15px',
-              padding: '10px 20px',
-              cursor: 'pointer',
-              backgroundColor: '#2c3e50',
+              backgroundColor: '#e74c3c',
               color: 'white',
-              border: 'none',
-              borderRadius: '5px',
+              padding: '10px',
+              borderRadius: '4px',
+              textAlign: 'center',
+              marginBottom: '15px',
+              fontWeight: 'bold',
             }}
           >
-            Đăng ký người khác
-          </button>
-        </div>
-      ) : (
-        <form
-          onSubmit={handleSubmit}
-          style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}
-        >
-          <div>
-            <label style={{ fontWeight: 'bold' }}>Họ và tên: </label>
+            {error}
+          </div>
+        )}
+        {success && (
+          <div
+            style={{
+              backgroundColor: '#2ecc71',
+              color: 'white',
+              padding: '10px',
+              borderRadius: '4px',
+              textAlign: 'center',
+              marginBottom: '15px',
+              fontWeight: 'bold',
+            }}
+          >
+            {success}
+          </div>
+        )}
+
+        <form onSubmit={handleRegister}>
+          <div style={{ marginBottom: '15px' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '5px',
+                color: '#34495e',
+                fontWeight: 'bold',
+              }}
+            >
+              Họ và tên:
+            </label>
             <input
               type="text"
               name="fullName"
-              required
-              style={{
-                width: '100%',
-                padding: '10px',
-                marginTop: '5px',
-                borderRadius: '4px',
-                border: '1px solid #ccc',
-              }}
+              value={formData.fullName}
               onChange={handleChange}
-            />
-          </div>
-          <div style={{ display: 'flex', gap: '15px' }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontWeight: 'bold' }}>Ngày sinh: </label>
-              <input
-                type="text"
-                name="dob"
-                placeholder="DD/MM/YYYY"
-                required
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  marginTop: '5px',
-                  borderRadius: '4px',
-                  border: '1px solid #ccc',
-                }}
-                onChange={handleChange}
-              />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontWeight: 'bold' }}>Căn cước công dân: </label>
-              <input
-                type="text"
-                name="cccd"
-                required
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  marginTop: '5px',
-                  borderRadius: '4px',
-                  border: '1px solid #ccc',
-                }}
-                onChange={handleChange}
-              />
-            </div>
-          </div>
-          <div>
-            <label style={{ fontWeight: 'bold' }}>Phòng ban / Bộ phận: </label>
-            <input
-              type="text"
-              name="department"
               required
-              style={{
-                width: '100%',
-                padding: '10px',
-                marginTop: '5px',
-                borderRadius: '4px',
-                border: '1px solid #ccc',
-              }}
-              onChange={handleChange}
+              style={inputStyle}
+              placeholder="VD: Nguyễn Văn Vũ"
             />
           </div>
 
-          {/* KHU VỰC NHẬP MÃ PIN BẢO MẬT */}
+          <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
+            <div style={{ flex: 1 }}>
+              <label
+                style={{
+                  display: 'block',
+                  marginBottom: '5px',
+                  color: '#34495e',
+                  fontWeight: 'bold',
+                }}
+              >
+                Ngày sinh:
+              </label>
+              <input
+                type="date"
+                name="dob"
+                value={formData.dob}
+                onChange={handleChange}
+                required
+                style={inputStyle}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label
+                style={{
+                  display: 'block',
+                  marginBottom: '5px',
+                  color: '#34495e',
+                  fontWeight: 'bold',
+                }}
+              >
+                Số CCCD:
+              </label>
+              <input
+                type="text"
+                name="cccd"
+                value={formData.cccd}
+                onChange={handleChange}
+                required
+                style={inputStyle}
+                placeholder="12 chữ số"
+              />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '15px' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '5px',
+                color: '#34495e',
+                fontWeight: 'bold',
+              }}
+            >
+              Phòng ban / Bộ phận:
+            </label>
+            <input
+              type="text"
+              name="department"
+              value={formData.department}
+              onChange={handleChange}
+              required
+              style={inputStyle}
+              placeholder="VD: IT, Nhân sự..."
+            />
+          </div>
+
+          {/* Ô NHẬP MẬT KHẨU ĐĂNG NHẬP MỚI THÊM */}
+          <div style={{ marginBottom: '15px' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '5px',
+                color: '#34495e',
+                fontWeight: 'bold',
+              }}
+            >
+              Mật khẩu đăng nhập Web:
+            </label>
+            <input
+              type="password"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              required
+              style={inputStyle}
+              placeholder="Dùng để đăng nhập hệ thống"
+            />
+          </div>
+
           <div
             style={{
               backgroundColor: '#fdf2e9',
               padding: '15px',
-              borderRadius: '5px',
+              borderRadius: '6px',
               border: '1px solid #e67e22',
+              marginBottom: '20px',
             }}
           >
-            <label style={{ fontWeight: 'bold', color: '#d35400' }}>
-              Thiết lập mã PIN (6 số) để khóa Private Key:{' '}
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '5px',
+                color: '#d35400',
+                fontWeight: 'bold',
+                textAlign: 'center',
+              }}
+            >
+              Thiết lập mã PIN KÝ SỐ (6 số):
             </label>
             <input
               type="password"
               name="pin"
+              value={formData.pin}
+              onChange={handleChange}
               maxLength="6"
-              placeholder="Ví dụ: 123456"
               required
+              style={{ ...inputStyle, textAlign: 'center', fontSize: '20px', letterSpacing: '5px' }}
+              placeholder="••••••"
+            />
+            <p
               style={{
-                width: '100%',
-                padding: '10px',
-                marginTop: '5px',
-                borderRadius: '4px',
-                border: '1px solid #d35400',
-                fontSize: '20px',
-                letterSpacing: '5px',
+                margin: '5px 0 0 0',
+                fontSize: '12px',
+                color: '#7f8c8d',
                 textAlign: 'center',
               }}
-              onChange={handleChange}
-            />
+            >
+              Mã PIN này dùng để mở khóa Private Key khi bạn ký văn bản.
+            </p>
           </div>
 
           <button
             type="submit"
             style={{
+              width: '100%',
               padding: '12px',
               backgroundColor: '#2980b9',
               color: 'white',
               border: 'none',
-              borderRadius: '5px',
+              borderRadius: '6px',
+              fontSize: '16px',
               fontWeight: 'bold',
               cursor: 'pointer',
-              fontSize: '16px',
             }}
           >
-            Đăng Ký Cloud HSM
+            ĐĂNG KÝ
           </button>
         </form>
-      )}
+
+        {/* NÚT QUAY LẠI TRANG ĐĂNG NHẬP */}
+        <div
+          style={{
+            textAlign: 'center',
+            marginTop: '20px',
+            paddingTop: '15px',
+            borderTop: '1px solid #ecf0f1',
+          }}
+        >
+          <span style={{ color: '#7f8c8d', fontSize: '14px' }}>Đã có tài khoản? </span>
+          <span
+            onClick={() => navigate('/login')}
+            style={{
+              color: '#27ae60',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              textDecoration: 'underline',
+            }}
+          >
+            Đăng nhập ngay
+          </span>
+        </div>
+      </div>
     </div>
   )
+}
+
+// Style chung cho các ô input
+const inputStyle = {
+  width: '100%',
+  padding: '10px',
+  border: '1px solid #bdc3c7',
+  borderRadius: '4px',
+  boxSizing: 'border-box',
+  outline: 'none',
 }
 
 export default Register
