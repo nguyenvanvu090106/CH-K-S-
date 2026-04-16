@@ -144,16 +144,57 @@ app.post('/api/sign', checkRole('Employee'), async (req, res) => {
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/đ/g, 'd')
       .replace(/Đ/g, 'D')
-    const signatureText = `Digitally Signed by: ${cleanName}\nCCCD: ${employee.cccd}\nDate: ${new Date().toLocaleString('vi-VN')}`
+    // --- ĐOẠN CODE VẼ CON DẤU CHUYÊN NGHIỆP ---
 
-    targetPage.drawText(signatureText, {
-      x: parseFloat(x) || 50,
-      y: parseFloat(y) || 100,
-      size: 10,
-      font: font,
-      color: rgb(0.75, 0.2, 0.2),
+    // 1. Dọn dẹp dấu tiếng Việt cho Bộ phận (Tránh lỗi sập font PDF giống như tên)
+    const cleanDept = employee.department
+      ? employee.department
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/đ/g, 'd')
+          .replace(/Đ/g, 'D')
+      : 'N/A'
+
+    // 2. Thiết lập tọa độ và kích thước khung
+    const startX = parseFloat(x) || 50
+    const startY = parseFloat(y) || 100
+    const boxWidth = 200
+    const boxHeight = 75
+
+    // 3. Vẽ Khung hình chữ nhật nền mờ, viền đỏ nét đứt (Giống bản preview)
+    targetPage.drawRectangle({
+      x: startX,
+      y: startY,
+      width: boxWidth,
+      height: boxHeight,
+      borderColor: rgb(0.8, 0.2, 0.2), // Viền đỏ
+      borderWidth: 1.5,
+      borderDashArray: [4, 4], // Tạo nét đứt
+      color: rgb(0.98, 0.94, 0.94), // Nền hồng cực nhạt
     })
 
+    // 4. Vẽ dòng chữ xác thực màu Xanh Lá
+    // (Lưu ý: Không dùng icon ✅ vì font mặc định của PDF sẽ báo lỗi, ta dùng chữ [V] để thay thế)
+    targetPage.drawText('Signature Valid [V]', {
+      x: startX + 10,
+      y: startY + boxHeight - 18,
+      size: 11,
+      font: font,
+      color: rgb(0.15, 0.68, 0.37), // Màu xanh lá cây
+    })
+
+    // 5. Vẽ thông tin chi tiết (Thêm Bộ phận)
+    // Phải dùng không dấu để an toàn tuyệt đối cho file
+    const detailText = `Signed by: ${cleanName}\nCCCD: ${employee.cccd}\nDept: ${cleanDept}\nDate: ${new Date().toLocaleString('vi-VN')}`
+
+    targetPage.drawText(detailText, {
+      x: startX + 10,
+      y: startY + boxHeight - 35,
+      size: 9,
+      font: font,
+      color: rgb(0.2, 0.2, 0.2), // Màu chữ xám đen cho dễ đọc
+      lineHeight: 12, // Khoảng cách giữa các dòng
+    })
     fs.writeFileSync(doc.path, await pdfDoc.save())
     Object.assign(doc, {
       signature,
@@ -179,8 +220,22 @@ app.get('/api/documents/:id/download', (req, res) => {
 
 app.get('/api/documents', (req, res) => res.json(db.documents))
 app.get('/api/employees', (req, res) => res.json(db.employees))
+// ==========================================
+// API: Kiểm tra mã nhân viên (Chuẩn bảo mật)
+// ==========================================
 app.post('/api/check-employee', (req, res) => {
-  res.json({ success: db.employees.some((e) => e.employeeId === req.body.employeeId) })
+  const { employeeId } = req.body
+
+  // Tìm xem mã NV có trong Database không
+  const exists = db.employees.some((e) => e.employeeId === employeeId)
+
+  if (exists) {
+    // CÓ TỒN TẠI -> Trả về 200 OK
+    res.json({ success: true, message: 'Đăng nhập thành công' })
+  } else {
+    // KHÔNG TỒN TẠI -> Ép trả về lỗi 404 (Not Found) để Frontend chặn lại
+    res.status(404).json({ error: 'Mã nhân viên không tồn tại trong hệ thống!' })
+  }
 })
 
 app.listen(PORT, () => console.log(`[SYSTEM] Backend running on http://localhost:${PORT}`))

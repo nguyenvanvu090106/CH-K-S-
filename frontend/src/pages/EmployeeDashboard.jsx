@@ -1,6 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
+import { Document, Page, pdfjs } from 'react-pdf'
+
+// Cấu hình Worker siêu việt để React có thể đọc hiểu dữ liệu nhị phân của PDF (Không có dòng này là lỗi liền nhé)
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
 
 const EmployeeDashboard = () => {
   const navigate = useNavigate()
@@ -14,11 +18,17 @@ const EmployeeDashboard = () => {
   const [statusMsg, setStatusMsg] = useState('')
   const [pin, setPin] = useState('') // State lưu mã PIN
   // State lưu tọa độ gửi cho Backend (Hệ tọa độ PDF)
-  const [signPos, setSignPos] = useState({ x: 350, y: 100 })
+  const [numPages, setNumPages] = useState(null) // Quản lý tổng số trang của PDF
 
-  // THÊM DÒNG NÀY: State lưu vị trí của Ô vuông màu đỏ trên Bản đồ Mini (Hệ tọa độ màn hình)
-  const [boxPos, setBoxPos] = useState({ x: 180, y: 300 })
-
+  // Sửa lại state lưu tọa độ để ghi nhớ cả Trang mà bạn đang click vào
+  const [signPos, setSignPos] = useState({ x: 50, y: 100, pageNum: 1 })
+  const [boxPos, setBoxPos] = useState(null) // Ban đầu ẩn ô vuông đi
+  // THÊM ĐOẠN NÀY VÀO DƯỚI CÁC USESTATE
+  // Khóa đường link PDF lại, chỉ tải lại khi đổi sang xem file khác
+  const pdfUrl = useMemo(() => {
+    if (!previewDoc) return null
+    return `http://localhost:3000/api/documents/${previewDoc.id}/view?t=${new Date().getTime()}`
+  }, [previewDoc]) // Chỉ thay đổi khi previewDoc thay đổi
   // 1. Kiểm tra session và lấy danh sách file được giao
   useEffect(() => {
     const session = JSON.parse(localStorage.getItem('userSession'))
@@ -65,7 +75,7 @@ const EmployeeDashboard = () => {
           pin: pin, // <--- Gửi PIN lên
           x: signPos.x, // Gửi tọa độ X
           y: signPos.y, // Gửi tọa độ Y
-          pageNum: 1, // Tạm thời mặc định ký trang 1
+          pageNum: signPos.pageNum, // <--- SỬA CHỖ NÀY ĐỂ KÝ ĐÚNG TRANG
         },
         { headers: { 'x-role': 'Employee' } }
       )
@@ -173,153 +183,174 @@ const EmployeeDashboard = () => {
         </p>
       </div>
 
-      {/* KHUNG XEM TRƯỚC VÀ CHỌN VỊ TRÍ KÝ PDF */}
+      {/* KHUNG KÝ SỐ TRỰC TIẾP TRÊN PDF (HỖ TRỢ NHIỀU TRANG & CHỐNG TRÀN LỀ) */}
       {previewDoc && (
         <div
           style={{
-            backgroundColor: '#fff',
+            backgroundColor: '#ecf0f1',
             padding: '20px',
-            border: '2px solid #34495e',
             borderRadius: '8px',
             marginBottom: '20px',
-            position: 'relative',
+            boxShadow: 'inset 0 0 10px rgba(0,0,0,0.1)',
           }}
         >
-          <button
-            onClick={() => setPreviewDoc(null)}
-            style={{
-              position: 'absolute',
-              right: '10px',
-              top: '10px',
-              cursor: 'pointer',
-              backgroundColor: '#e74c3c',
-              color: 'white',
-              border: 'none',
-              padding: '5px 10px',
-              borderRadius: '4px',
-            }}
-          >
-            ✖ Đóng
-          </button>
-          <h3 style={{ marginTop: 0, color: '#2c3e50' }}>Đang xem: {previewDoc.filename}</h3>
-          {/* Hiển thị PDF bằng Iframe */}
-          <iframe
-            src={`http://localhost:3000/api/documents/${previewDoc.id}/view?t=${new Date().getTime()}`}
-            width="100%"
-            height="500px"
-            style={{ border: '1px solid #ccc', borderRadius: '4px' }}
-            title="PDF Preview"
-          />
-          {/* Bảng điều khiển chọn tọa độ */}
-          {/* BẢNG ĐIỀU KHIỂN CHỌN TỌA ĐỘ BẰNG BẢN ĐỒ MINI */}
+          {/* HEADER CỦA KHUNG XEM TRƯỚC */}
           <div
             style={{
-              marginTop: '15px',
-              padding: '20px',
-              backgroundColor: '#fdf2e9',
-              borderRadius: '8px',
-              border: '1px dashed #e67e22',
               display: 'flex',
-              gap: '30px',
+              justifyContent: 'space-between',
               alignItems: 'center',
+              marginBottom: '15px',
             }}
           >
-            {/* CỘT TRÁI: Hướng dẫn và Nút Ký */}
-            <div style={{ flex: 1 }}>
-              <h4 style={{ margin: '0 0 10px 0', color: '#d35400' }}>
-                📍 Tùy chỉnh vị trí đóng dấu:
-              </h4>
-              <p style={{ fontSize: '14px', color: '#555', lineHeight: '1.6' }}>
-                Khung hiển thị PDF (ở trên) không cho phép bắt sự kiện click. <br />
-                Vui lòng <b>Click vào Bản đồ trang A4 thu nhỏ</b> ở bên cạnh để di chuyển ô vuông
-                chữ ký đến đúng vị trí bạn muốn.
+            {/* CỘT TRÁI: TIÊU ĐỀ */}
+            <div>
+              <h3 style={{ margin: 0, color: '#2c3e50' }}>Đang xử lý: {previewDoc.filename}</h3>
+              <p
+                style={{
+                  margin: '5px 0 0 0',
+                  color: '#e67e22',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                }}
+              >
+                👉 Cuộn để xem hết các trang. CLICK vào vị trí bất kỳ để đặt con dấu!
               </p>
-              <div
-                style={{
-                  padding: '10px',
-                  backgroundColor: '#fff',
-                  borderLeft: '4px solid #27ae60',
-                  marginTop: '15px',
-                }}
-              >
-                <span style={{ fontSize: '13px', color: '#27ae60', fontWeight: 'bold' }}>
-                  Tọa độ sẽ gửi lên Server: X = {Math.round(signPos.x)} | Y ={' '}
-                  {Math.round(signPos.y)}
-                </span>
-              </div>
             </div>
 
-            {/* CỘT PHẢI: BẢN ĐỒ A4 MINI ĐỂ CLICK */}
-            <div
-              onClick={(e) => {
-                // 1. Tính toán tọa độ click chuột trên cái khung bản đồ này
-                const rect = e.currentTarget.getBoundingClientRect()
-                let clickX = e.clientX - rect.left
-                let clickY = e.clientY - rect.top
+            {/* CỘT PHẢI: CÁC NÚT THAO TÁC */}
+            <div style={{ display: 'flex', gap: '10px' }}>
+              {/* CHỈ HIỆN NÚT "KÝ NGAY" NẾU FILE CHƯA KÝ */}
+              {previewDoc.status !== 'Signed' && (
+                <button
+                  onClick={() => handleSign(previewDoc)}
+                  style={{
+                    backgroundColor: '#2980b9',
+                    color: 'white',
+                    border: 'none',
+                    padding: '8px 15px',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                  }}
+                >
+                  🖋️ Ký Ngay
+                </button>
+              )}
 
-                // 2. Chặn không cho ô vuông bị tràn ra ngoài viền bản đồ
-                if (clickX > 180) clickX = 180 // 280 (chiều rộng) - 100 (độ rộng ô vuông)
-                if (clickY > 346) clickY = 346 // 396 (chiều cao) - 50 (độ cao ô vuông)
+              <button
+                onClick={() => {
+                  setPreviewDoc(null)
+                  setBoxPos(null)
+                }}
+                style={{
+                  backgroundColor: '#e74c3c',
+                  color: 'white',
+                  border: 'none',
+                  padding: '8px 15px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                }}
+              >
+                ✖ Đóng
+              </button>
+            </div>
+          </div>
 
-                // 3. Cập nhật vị trí UI của ô vuông
-                setBoxPos({ x: clickX, y: clickY })
-
-                // 4. QUY ĐỔI TOÁN HỌC SANG HỆ TỌA ĐỘ CỦA BẢN PDF THẬT
-                // Khổ A4 thật là 595 x 842. Bản đồ là 280 x 396 => Tỷ lệ là ~ 2.125
-                const scale = 595 / 280
-                const pdfX = clickX * scale
-                // QUAN TRỌNG: Backend pdf-lib tính gốc tọa độ Y từ DƯỚI LÊN, nên ta phải trừ ngược lại
-                const pdfY = 842 - clickY * scale - 50
-
-                setSignPos({ x: pdfX, y: pdfY })
-              }}
-              style={{
-                width: '280px',
-                height: '396px',
-                backgroundColor: 'white',
-                border: '2px solid #bdc3c7',
-                position: 'relative',
-                cursor: 'crosshair',
-                boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
-              }}
+          {/* VÙNG CUỘN ĐỂ HIỂN THỊ NHIỀU TRANG */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              backgroundColor: '#525659',
+              padding: '20px',
+              borderRadius: '4px',
+              maxHeight: '600px',
+              overflowY: 'auto',
+            }}
+          >
+            <Document
+              file={pdfUrl} // <--- Đã dùng biến pdfUrl ở đây để chống giật
+              onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+              loading={<div style={{ color: 'white' }}>Đang tải tài liệu PDF... ⏳</div>}
             >
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '5px',
-                  left: '10px',
-                  color: '#bdc3c7',
-                  fontSize: '12px',
-                  fontWeight: 'bold',
-                }}
-              >
-                Mô phỏng Trang A4
-              </div>
+              {/* Lặp qua tất cả các trang để hiển thị */}
+              {Array.from(new Array(numPages), (el, index) => {
+                const pageIndex = index + 1
+                return (
+                  <div
+                    key={`page_${pageIndex}`}
+                    // Nếu ký rồi thì đổi chuột thành dấu Cấm (not-allowed), chưa ký thì hình chữ thập (crosshair)
+                    style={{
+                      position: 'relative',
+                      marginBottom: '20px',
+                      cursor: previewDoc.status === 'Signed' ? 'not-allowed' : 'crosshair',
+                      boxShadow: '0 5px 15px rgba(0,0,0,0.3)',
+                    }}
+                    // 👇 ĐÂY CHÍNH LÀ ONCLICK CHÚNG TA CẦN BẮT 👇
+                    onClick={(e) => {
+                      // 1. Nếu file đã Ký (Signed) thì return luôn, không làm gì cả!
+                      if (previewDoc.status === 'Signed') return
 
-              {/* Ô VUÔNG ĐỎ ĐẠI DIỆN CHO CON DẤU CHỮ KÝ */}
-              <div
-                style={{
-                  position: 'absolute',
-                  left: `${boxPos.x}px`,
-                  top: `${boxPos.y}px`,
-                  width: '100px',
-                  height: '50px',
-                  border: '2px dashed #e74c3c',
-                  backgroundColor: 'rgba(231, 76, 60, 0.15)',
-                  pointerEvents: 'none', // Giúp click xuyên qua ô vuông xuống bản đồ
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#c0392b',
-                  fontSize: '11px',
-                  fontWeight: 'bold',
-                  textAlign: 'center',
-                  transition: 'all 0.1s ease-out', // Hiệu ứng lướt mượt mà
-                }}
-              >
-                Khu vực <br /> Chữ ký
-              </div>
-            </div>
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      const clickX = e.clientX - rect.left
+                      let clickY = e.clientY - rect.top
+
+                      // THUẬT TOÁN CHỐNG RỚT LỀ DƯỚI:
+                      if (clickY > rect.height - 70) {
+                        clickY = rect.height - 70
+                      }
+
+                      // Lưu vị trí hiển thị ô vuông lên màn hình
+                      setBoxPos({ x: clickX, y: clickY, pageNum: pageIndex })
+
+                      // Quy đổi hệ tọa độ cho Backend
+                      const pdfY = rect.height - clickY
+                      setSignPos({ x: clickX, y: pdfY, pageNum: pageIndex })
+                    }}
+                  >
+                    <Page
+                      pageNumber={pageIndex}
+                      width={600}
+                      renderTextLayer={false}
+                      renderAnnotationLayer={false}
+                    />
+
+                    {/* CHỈ HIỆN Ô VUÔNG NẾU: ĐÚNG TRANG ĐÓ + FILE CHƯA KÝ */}
+                    {boxPos && boxPos.pageNum === pageIndex && previewDoc.status !== 'Signed' && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: `${boxPos.x}px`,
+                          top: `${boxPos.y}px`,
+                          width: '180px',
+                          height: '60px',
+                          border: '2px dashed #e74c3c',
+                          backgroundColor: 'rgba(231, 76, 60, 0.15)',
+                          pointerEvents: 'none',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'flex-start',
+                          justifyContent: 'center',
+                          paddingLeft: '5px',
+                          boxSizing: 'border-box',
+                          transition: 'all 0.1s ease-out',
+                        }}
+                      >
+                        <span style={{ fontSize: '11px', color: '#c0392b', fontWeight: 'bold' }}>
+                          Khu vực ký số ✅
+                        </span>
+                        <span style={{ fontSize: '10px', color: '#c0392b' }}>Tọa độ an toàn</span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </Document>
           </div>
         </div>
       )}
