@@ -24,21 +24,57 @@ const Register = () => {
     setError('')
     setSuccess('')
 
-    if (formData.pin.length !== 6 || isNaN(formData.pin)) {
-      setError('Mã PIN phải bao gồm đúng 6 chữ số!')
+    // 1. Kiểm tra CCCD: Trừ chữ 'admin', còn lại phải đúng 12 chữ số
+    const cccdRegex = /^\d{12}$/
+    if (formData.cccd !== 'admin' && !cccdRegex.test(formData.cccd)) {
+      setError('❌ Số CCCD không hợp lệ! Vui lòng nhập đúng 12 chữ số.')
       return
     }
 
+    // 2. Kiểm tra Mật khẩu: Phải từ 6 ký tự trở lên
+    if (formData.password.length < 6) {
+      setError('❌ Mật khẩu quá ngắn! Phải có ít nhất 6 ký tự.')
+      return
+    }
+
+    // 3. Kiểm tra Mã PIN: Phải đúng 6 chữ số (Dùng regex chuẩn hơn isNaN)
+    const pinRegex = /^\d{6}$/
+    if (!pinRegex.test(formData.pin)) {
+      setError('❌ Mã PIN ký số phải bao gồm đúng 6 chữ số!')
+      return
+    }
+    // 4. KIỂM TRA TUỔI: Phải từ 18 tuổi trở lên
+    if (!formData.dob) {
+      setError('❌ Vui lòng chọn ngày sinh!')
+      return
+    }
+    const birthDate = new Date(formData.dob)
+    const today = new Date()
+    let age = today.getFullYear() - birthDate.getFullYear()
+    const monthDiff = today.getMonth() - birthDate.getMonth()
+
+    // Nếu chưa tới tháng sinh trong năm nay, hoặc đang ở tháng sinh nhưng chưa tới ngày sinh thì trừ đi 1 tuổi
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--
+    }
+
+    if (age < 18) {
+      setError('❌ Người lao động phải đủ 18 tuổi trở lên!')
+      return
+    }
     try {
+      // Nếu qua được hết 3 chốt chặn trên thì mới gọi API
       const res = await axios.post('http://localhost:3000/api/register', formData)
-      setSuccess('Đăng ký thành công! Hệ thống đã cấp phát Khóa thành công.')
+
+      setSuccess('✅ Đăng ký thành công! Hệ thống đang chuyển hướng...')
+
       // Xóa form sau khi đăng ký thành công
       setFormData({ fullName: '', dob: '', cccd: '', department: '', password: '', pin: '' })
 
       // Tự động chuyển về trang Đăng nhập sau 2 giây
       setTimeout(() => navigate('/login'), 2000)
     } catch (err) {
-      setError(err.response?.data?.error || 'Lỗi kết nối máy chủ!')
+      setError('❌ ' + (err.response?.data?.error || 'Lỗi kết nối máy chủ!'))
     }
   }
 

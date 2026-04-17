@@ -23,7 +23,9 @@ const Login = () => {
       // Gọi thông báo THÀNH CÔNG (Màu xanh lá)
       toast.success(`Đăng nhập thành công! Xin chào ${res.data.session.fullName}`)
 
-      if (res.data.session.role === 'Manager') {
+      // Thay vì chỉ có /manager và /employee, giờ bạn chia 3 ngã rẽ:
+      // Sếp lớn (SuperAdmin) và Quản lý (Manager) đều về chung 1 trang Dashboard
+      if (res.data.session.role === 'SuperAdmin' || res.data.session.role === 'Manager') {
         navigate('/manager')
       } else {
         navigate('/employee')
@@ -86,7 +88,7 @@ const Login = () => {
                 color: role === 'Employee' ? 'white' : '#7f8c8d',
               }}
             >
-              👤 Nhân Viên
+              Nhân Viên
             </button>
             <button
               type="button"
@@ -102,7 +104,7 @@ const Login = () => {
                 color: role === 'Manager' ? 'white' : '#7f8c8d',
               }}
             >
-              👑 Quản Lý
+              Quản Lý
             </button>
           </div>
 
@@ -122,7 +124,7 @@ const Login = () => {
               type="text"
               value={cccd}
               onChange={(e) => setCccd(e.target.value)}
-              placeholder="Nhập CCCD của bạn"
+              placeholder="Nhập số CCCD(12 số)"
               style={{
                 width: '100%',
                 minHeight: '60px',

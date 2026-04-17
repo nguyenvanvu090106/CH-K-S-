@@ -15,9 +15,7 @@ const PORT = 3000
 // ==========================================
 // DATABASE IN-MEMORY
 // ==========================================
-// ==========================================
-// DATABASE IN-MEMORY
-// ==========================================
+
 const db = {
   documents: [],
   keys: {},
@@ -28,7 +26,8 @@ const db = {
       fullName: 'Quản Trị Viên',
       cccd: 'admin', // Dùng chữ 'admin' làm CCCD để dễ test
       password: 'admin', // Mật khẩu Manager
-      role: 'Manager',
+      role: 'SuperAdmin',
+      status: 'Active',
     },
   ],
 }
@@ -42,10 +41,14 @@ const generateFileHash = (filePath) => {
   return hashSum.digest('hex')
 }
 
-const checkRole = (requiredRole) => (req, res, next) => {
+// Middleware kiểm tra quyền mới (Hỗ trợ mảng nhiều Role)
+const checkRole = (allowedRoles) => (req, res, next) => {
   const role = req.headers['x-role']
-  if (role !== requiredRole) {
-    return res.status(403).json({ error: `Access Denied: Requires ${requiredRole} role` })
+  // Nếu vai trò của user không nằm trong danh sách cho phép -> Cấm
+  if (!allowedRoles.includes(role)) {
+    return res
+      .status(403)
+      .json({ error: `Từ chối truy cập: Yêu cầu quyền ${allowedRoles.join(' hoặc ')}` })
   }
   next()
 }
@@ -101,6 +104,7 @@ app.post('/api/register', (req, res) => {
     cccd,
     password: password, // Lưu mật khẩu
     role: 'Employee', // Mặc định người đăng ký mới là Nhân viên
+    status: 'Pending',
     encryptedPrivateKey: privateKey,
   }
 
@@ -110,26 +114,32 @@ app.post('/api/register', (req, res) => {
 })
 
 // 2. UPLOAD (MANAGER)
-app.post('/api/upload', checkRole('Manager'), upload.single('document'), (req, res) => {
-  // Lấy thêm customName từ req.body (form data gửi lên)
-  const { assignedTo, customName } = req.body
-  if (!req.file || !assignedTo) return res.status(400).json({ error: 'Thiếu file hoặc người ký!' })
+app.post(
+  '/api/upload',
+  checkRole(['SuperAdmin', 'Manager']),
+  upload.single('document'),
+  (req, res) => {
+    // Lấy thêm customName từ req.body (form data gửi lên)
+    const { assignedTo, customName } = req.body
+    if (!req.file || !assignedTo)
+      return res.status(400).json({ error: 'Thiếu file hoặc người ký!' })
 
-  // KIỂM TRA: Nếu có customName thì dùng tên đó, nếu không thì lấy tên gốc của file
-  const displayName = customName ? customName : req.file.originalname
+    // KIỂM TRA: Nếu có customName thì dùng tên đó, nếu không thì lấy tên gốc của file
+    const displayName = customName ? customName : req.file.originalname
 
-  const newDoc = {
-    id: Date.now().toString(),
-    filename: displayName, // <--- Thay vì tên gốc, ta lưu cái tên đã được kiểm tra này
-    path: req.file.path,
-    originalHash: generateFileHash(req.file.path),
-    assignedTo,
-    status: 'Pending Signature',
+    const newDoc = {
+      id: Date.now().toString(),
+      filename: displayName, // <--- Thay vì tên gốc, ta lưu cái tên đã được kiểm tra này
+      path: req.file.path,
+      originalHash: generateFileHash(req.file.path),
+      assignedTo,
+      status: 'Pending Signature',
+    }
+
+    db.documents.push(newDoc)
+    res.json({ message: 'Giao việc thành công', document: newDoc })
   }
-
-  db.documents.push(newDoc)
-  res.json({ message: 'Giao việc thành công', document: newDoc })
-})
+)
 
 // 3. XEM FILE (DÙNG CHO IFRAME PREVIEW) - SỬA LỖI TẠI ĐÂY
 app.get('/api/documents/:id/view', (req, res) => {
@@ -287,19 +297,36 @@ app.post('/api/check-employee', (req, res) => {
 app.post('/api/login', (req, res) => {
   const { cccd, password, role } = req.body
 
-  // Kiểm tra khớp 3 điều kiện: CCCD, Password và Role
-  const user = db.employees.find(
-    (e) => e.cccd === cccd && e.password === password && e.role === role
-  )
+  // Tìm người dùng với logic phân quyền linh hoạt
+  const user = db.employees.find((e) => {
+    // 1. Kiểm tra CCCD và mật khẩu trước
+    const isAuth = e.cccd === cccd && e.password === password
+    if (!isAuth) return false
+
+    // 2. Kiểm tra Vai trò (Role)
+    if (role === 'Manager') {
+      // Nếu ở tab "Quản lý": Chấp nhận cả Quản lý (Manager) và Admin tối cao (SuperAdmin)
+      return e.role === 'Manager' || e.role === 'SuperAdmin'
+    }
+
+    // Nếu ở tab "Nhân viên": Chỉ chấp nhận đúng role Employee
+    return e.role === role
+  })
 
   if (user) {
+    // 3. Kiểm tra trạng thái phê duyệt (Dành cho nhân viên mới đăng ký)
+    if (user.status === 'Pending') {
+      return res.status(403).json({ error: 'Tài khoản của bạn đang chờ Admin phê duyệt!' })
+    }
+
+    // 4. Trả về thông tin session (Lưu ý: trả về user.role thật từ DB để Frontend điều hướng)
     res.json({
       success: true,
       message: 'Đăng nhập thành công',
       session: {
         employeeId: user.employeeId,
         fullName: user.fullName,
-        role: user.role,
+        role: user.role, // Trả về 'SuperAdmin', 'Manager' hoặc 'Employee'
       },
     })
   } else {
@@ -335,3 +362,64 @@ app.post('/api/update-profile', (req, res) => {
   }
 })
 app.listen(PORT, () => console.log(`[SYSTEM] Backend running on http://localhost:${PORT}`))
+// ==========================================
+// API DÀNH RIÊNG CHO SUPER ADMIN
+// ==========================================
+
+// 1. Xem danh sách nhân viên (có thể lọc theo phòng ban)
+app.get('/api/admin/employees', checkRole(['SuperAdmin']), (req, res) => {
+  // Ẩn đi những thông tin nhạy cảm như password, privateKey trước khi gửi về Web
+  const safeEmployees = db.employees.map((emp) => ({
+    employeeId: emp.employeeId,
+    fullName: emp.fullName,
+    department: emp.department,
+    role: emp.role,
+    status: emp.status,
+  }))
+  res.json(safeEmployees)
+})
+
+// API Duyệt hoặc Xóa tài khoản
+app.post('/api/admin/update-employee', checkRole(['SuperAdmin']), (req, res) => {
+  const { employeeId, action } = req.body
+
+  // Tìm vị trí của nhân viên trong mảng
+  const userIndex = db.employees.findIndex((e) => e.employeeId === employeeId)
+  if (userIndex === -1) return res.status(404).json({ error: 'Không tìm thấy user' })
+
+  if (action === 'Approve') {
+    db.employees[userIndex].status = 'Active'
+    res.json({ message: 'Đã duyệt tài khoản thành công!' })
+  } else if (action === 'Delete') {
+    // Cắt nhân viên này khỏi mảng database
+    db.employees.splice(userIndex, 1)
+    res.json({ message: 'Đã xóa nhân viên khỏi hệ thống!' })
+  } else {
+    res.status(400).json({ error: 'Hành động không hợp lệ' })
+  }
+})
+// API: XEM CHI TIẾT MÃ BĂM VÀ KHÓA PUBLIC KEY
+app.get('/api/documents/:id/details', (req, res) => {
+  const doc = db.documents.find((d) => d.id == req.params.id)
+  if (!doc) return res.status(404).json({ error: 'Không tìm thấy văn bản!' })
+
+  // Tính toán lại mã băm của file ĐANG NẰM TRÊN Ổ CỨNG lúc này
+  // (Nếu file đã được ký, nó sẽ tự động là mã băm sau khi ký)
+  let currentHash = ''
+  if (fs.existsSync(doc.path)) {
+    currentHash = generateFileHash(doc.path)
+  }
+
+  // Lấy Public Key của người ký (nếu có)
+  const publicKey = doc.signerId ? db.keys[doc.signerId] : 'Chưa có dữ liệu khóa'
+
+  res.json({
+    id: doc.id,
+    filename: doc.filename,
+    status: doc.status,
+    originalHash: doc.originalHash, // Mã băm file gốc lúc mới tải lên
+    currentHash: currentHash, // Mã băm file hiện tại (sau ký)
+    signature: doc.signature || 'Chưa ký', // Chữ ký RSA (Mã hóa của originalHash)
+    publicKey: publicKey, // Public key để giải mã
+  })
+})
